@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Picks - MLB Postseason Pick'em</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <h1>My Picks</h1>
+  <p class="subtitle">Pick the series winner and the length. You can change a pick any time before its round locks.</p>
+  <div id="rounds"></div>
+</main>
+
+<script src="/app.js"></script>
+<script>
+let rounds = [];
+
+function statusBadge(rnd) {
+  if (rnd.status === 'final') return `<span class="badge final">Final</span>`;
+  if (rnd.locked) return `<span class="badge locked">Locked</span>`;
+  if (rnd.status === 'open') return `<span class="badge open">Open</span>`;
+  return `<span class="badge pending">Matchup TBD</span>`;
+}
+
+function renderRounds() {
+  const container = document.getElementById('rounds');
+  container.innerHTML = '';
+  for (const rnd of rounds) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const hasMatchup = rnd.teamA && rnd.teamB;
+    const disabled = rnd.locked || !hasMatchup;
+    const myPick = rnd.myPick;
+    const minLen = Math.floor(rnd.bestOf / 2) + 1;
+
+    let lengthOptions = '';
+    for (let i = minLen; i <= rnd.bestOf; i++) {
+      const sel = myPick && myPick.pickedLength === i ? 'selected' : '';
+      lengthOptions += `<option value="${i}" ${sel}>in ${i} games</option>`;
+    }
+
+    card.innerHTML = `
+      <div class="round-header">
+        <h3>${rnd.roundName}</h3>
+        ${statusBadge(rnd)}
+      </div>
+      ${!hasMatchup ? '<p class="muted">Matchup not set yet - check back once this round is determined.</p>' : ''}
+      ${hasMatchup ? `
+        <div class="team-row" data-round="${rnd.id}">
+          <button type="button" class="team-btn" data-team="${rnd.teamA}">${rnd.teamA}</button>
+          <button type="button" class="team-btn" data-team="${rnd.teamB}">${rnd.teamB}</button>
+        </div>
+        <div class="field-row">
+          <div>
+            <label>Series length</label>
+            <select class="lengthSelect">${lengthOptions}</select>
+          </div>
+          ${rnd.hasMvp ? `
+          <div>
+            <label>Series MVP</label>
+            <input type="text" class="mvpInput" placeholder="Player name" value="${myPick && myPick.pickedMvp ? myPick.pickedMvp : ''}">
+          </div>` : ''}
+        </div>
+        <div class="muted">Locks: ${fmtDate(rnd.lockTime)}</div>
+        <div style="margin-top:10px;">
+          <button class="primary saveBtn" ${disabled ? 'disabled' : ''}>${myPick ? 'Update pick' : 'Submit pick'}</button>
+        </div>
+        <div class="status-msg"></div>
+      ` : ''}
+      ${rnd.status === 'final' ? `<p class="muted" style="margin-top:8px;">Result: <strong>${rnd.actualWinner}</strong> in ${rnd.actualLength}${rnd.actualMvp ? ` &middot; MVP: ${rnd.actualMvp}` : ''}</p>` : ''}
+    `;
+
+    if (hasMatchup) {
+      const teamBtns = card.querySelectorAll('.team-btn');
+      let selectedTeam = myPick ? myPick.pickedTeam : null;
+      teamBtns.forEach(btn => {
+        if (btn.dataset.team === selectedTeam) btn.classList.add('selected');
+        btn.addEventListener('click', () => {
+          if (disabled) return;
+          selectedTeam = btn.dataset.team;
+          teamBtns.forEach(b => b.classList.toggle('selected', b === btn));
+        });
+      });
+
+      const saveBtn = card.querySelector('.saveBtn');
+      const msg = card.querySelector('.status-msg');
+      saveBtn.addEventListener('click', async () => {
+        msg.textContent = '';
+        msg.className = 'status-msg';
+        if (!selectedTeam) {
+          msg.textContent = 'Pick a team first.';
+          msg.className = 'status-msg err';
+          return;
+        }
+        const pickedLength = parseInt(card.querySelector('.lengthSelect').value, 10);
+        const mvpInput = card.querySelector('.mvpInput');
+        const pickedMvp = mvpInput ? mvpInput.value.trim() : null;
+        try {
+          await api('/picks', {
+            method: 'POST',
+            body: { roundId: rnd.id, pickedTeam: selectedTeam, pickedLength, pickedMvp: pickedMvp || null },
+          });
+          msg.textContent = 'Saved!';
+          msg.className = 'status-msg ok';
+        } catch (e) {
+          msg.textContent = e.message;
+          msg.className = 'status-msg err';
+        }
+      });
+    }
+
+    container.appendChild(card);
+  }
+}
+
+(async () => {
+  const me = await getMe();
+  if (!me) { window.location.href = '/login.html'; return; }
+  renderNav('picks', me);
+  try {
+    rounds = await api('/rounds');
+    renderRounds();
+  } catch (e) {
+    document.getElementById('rounds').innerHTML = `<p class="status-msg err">${e.message}</p>`;
+  }
+})();
+</script>
+</body>
+</html>

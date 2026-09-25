@@ -1,0 +1,45 @@
+services:
+  pickem-db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pickem_db_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    networks:
+      - pickem-net
+
+  pickem-app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - pickem-db
+    environment:
+      DB_HOST: pickem-db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      COOKIE_SECURE: "true"
+      PORT: 8080
+    # Not published directly - route to this via your existing Nginx
+    # path-based routing, the same way Elite-Nine is set up.
+    expose:
+      - "8080"
+    networks:
+      - pickem-net
+
+networks:
+  pickem-net:
+    driver: bridge
+
+volumes:
+  pickem_db_data:

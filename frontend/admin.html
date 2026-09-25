@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin - MLB Postseason Pick'em</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <h1>Admin</h1>
+  <p class="subtitle">Set matchups as they're determined, sync lock times and results from MLB, or enter results manually. MVP always needs a manual entry.</p>
+  <div id="rounds"></div>
+</main>
+
+<script src="/app.js"></script>
+<script>
+let rounds = [];
+let teams = [];
+
+function teamOptions(selectedId) {
+  return `<option value="">-- select team --</option>` + teams.map(t =>
+    `<option value="${t.id}" ${String(t.id) === String(selectedId) ? 'selected' : ''}>${t.name}</option>`
+  ).join('');
+}
+
+function gameTypeOptionsFor(roundKey) {
+  // D = Division Series, L = League Championship Series, W = World Series
+  const guess = roundKey.startsWith('ALDS') || roundKey.startsWith('NLDS') ? 'D'
+    : (roundKey === 'ALCS' || roundKey === 'NLCS') ? 'L'
+    : roundKey === 'WS' ? 'W' : 'D';
+  return `
+    <option value="D" ${guess === 'D' ? 'selected' : ''}>Division Series (D)</option>
+    <option value="L" ${guess === 'L' ? 'selected' : ''}>Championship Series (L)</option>
+    <option value="W" ${guess === 'W' ? 'selected' : ''}>World Series (W)</option>
+  `;
+}
+
+function renderRounds() {
+  const container = document.getElementById('rounds');
+  container.innerHTML = '';
+  for (const rnd of rounds) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const laterStr = new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10);
+
+    card.innerHTML = `
+      <div class="round-header">
+        <h3>${rnd.roundKey} &middot; ${rnd.roundName}</h3>
+        <span class="badge ${rnd.status}">${rnd.status}</span>
+      </div>
+
+      <div class="admin-grid">
+        <div><label>Round name</label><input type="text" class="f-roundName" value="${rnd.roundName}"></div>
+        <div><label>Best of</label><input type="number" class="f-bestOf" value="${rnd.bestOf}" min="3" max="7" step="2"></div>
+        <div><label>Has MVP?</label><select class="f-hasMvp"><option value="false" ${!rnd.hasMvp ? 'selected' : ''}>No</option><option value="true" ${rnd.hasMvp ? 'selected' : ''}>Yes</option></select></div>
+        <div><label>Sort order</label><input type="number" class="f-sortOrder" value="${rnd.sortOrder}"></div>
+      </div>
+      <div class="admin-grid">
+        <div><label>Team A</label><select class="f-teamA">${teamOptions(rnd.teamAMlbId)}</select></div>
+        <div><label>Team B</label><select class="f-teamB">${teamOptions(rnd.teamBMlbId)}</select></div>
+      </div>
+      <button class="secondary saveRoundBtn">Save matchup / settings</button>
+      <div class="status-msg saveMsg"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+
+      <div class="admin-grid">
+        <div><label>Series type</label><select class="f-gameType">${gameTypeOptionsFor(rnd.roundKey)}</select></div>
+        <div><label>From date</label><input type="text" class="f-startDate" value="${todayStr}" placeholder="YYYY-MM-DD"></div>
+        <div><label>To date</label><input type="text" class="f-endDate" value="${laterStr}" placeholder="YYYY-MM-DD"></div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="secondary syncLockBtn">Sync Game 1 lock time from MLB</button>
+        <button class="secondary syncResultBtn">Sync result from MLB</button>
+      </div>
+      <div class="status-msg syncMsg"></div>
+      <p class="muted" style="margin-top:8px;">Lock time: ${fmtDate(rnd.lockTime)}${rnd.status === 'final' ? ` &middot; Winner: ${rnd.actualWinner} in ${rnd.actualLength}` : ''}</p>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+
+      <div class="admin-grid">
+        <div><label>Actual winner</label><select class="f-actualWinner">
+          <option value="">-- none --</option>
+          ${rnd.teamA ? `<option value="${rnd.teamA}" ${rnd.actualWinner === rnd.teamA ? 'selected' : ''}>${rnd.teamA}</option>` : ''}
+          ${rnd.teamB ? `<option value="${rnd.teamB}" ${rnd.actualWinner === rnd.teamB ? 'selected' : ''}>${rnd.teamB}</option>` : ''}
+        </select></div>
+        <div><label>Series length</label><input type="number" class="f-actualLength" value="${rnd.actualLength || ''}" min="1" max="7"></div>
+        ${rnd.hasMvp ? `<div><label>Series MVP</label><input type="text" class="f-actualMvp" value="${rnd.actualMvp || ''}"></div>` : ''}
+      </div>
+      <button class="secondary saveResultBtn">Save result manually (marks Final)</button>
+      <div class="status-msg resultMsg"></div>
+    `;
+
+    card.querySelector('.saveRoundBtn').addEventListener('click', async () => {
+      const msg = card.querySelector('.saveMsg');
+      try {
+        const teamAId = card.querySelector('.f-teamA').value;
+        const teamBId = card.querySelector('.f-teamB').value;
+        const teamAName = teamAId ? teams.find(t => String(t.id) === teamAId).name : null;
+        const teamBName = teamBId ? teams.find(t => String(t.id) === teamBId).name : null;
+        await api('/admin/rounds', {
+          method: 'POST',
+          body: {
+            id: rnd.id,
+            roundKey: rnd.roundKey,
+            roundName: card.querySelector('.f-roundName').value,
+            bestOf: parseInt(card.querySelector('.f-bestOf').value, 10),
+            hasMvp: card.querySelector('.f-hasMvp').value === 'true',
+            teamA: teamAName, teamAMlbId: teamAId ? parseInt(teamAId, 10) : null,
+            teamB: teamBName, teamBMlbId: teamBId ? parseInt(teamBId, 10) : null,
+            sortOrder: parseInt(card.querySelector('.f-sortOrder').value, 10),
+          },
+        });
+        msg.textContent = 'Saved.'; msg.className = 'status-msg ok';
+        await loadRounds();
+      } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
+    });
+
+    card.querySelector('.syncLockBtn').addEventListener('click', async () => {
+      const msg = card.querySelector('.syncMsg');
+      try {
+        const r = await api('/admin/sync-lock', {
+          method: 'POST',
+          body: {
+            roundId: rnd.id,
+            gameTypes: card.querySelector('.f-gameType').value,
+            startDate: card.querySelector('.f-startDate').value,
+            endDate: card.querySelector('.f-endDate').value,
+          },
+        });
+        msg.textContent = 'Lock time set to ' + fmtDate(r.lockTime); msg.className = 'status-msg ok';
+        await loadRounds();
+      } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
+    });
+
+    card.querySelector('.syncResultBtn').addEventListener('click', async () => {
+      const msg = card.querySelector('.syncMsg');
+      try {
+        const r = await api('/admin/sync-result', {
+          method: 'POST',
+          body: {
+            roundId: rnd.id,
+            gameTypes: card.querySelector('.f-gameType').value,
+            startDate: card.querySelector('.f-startDate').value,
+            endDate: card.querySelector('.f-endDate').value,
+          },
+        });
+        msg.textContent = r.winner ? `Winner: ${r.winner} in ${r.length}. Remember to add the MVP below.` : `Not final yet (${r.gamesPlayed} games played).`;
+        msg.className = 'status-msg ok';
+        await loadRounds();
+      } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
+    });
+
+    card.querySelector('.saveResultBtn').addEventListener('click', async () => {
+      const msg = card.querySelector('.resultMsg');
+      try {
+        const mvpField = card.querySelector('.f-actualMvp');
+        await api('/admin/set-result', {
+          method: 'POST',
+          body: {
+            roundId: rnd.id,
+            actualWinner: card.querySelector('.f-actualWinner').value || null,
+            actualLength: card.querySelector('.f-actualLength').value ? parseInt(card.querySelector('.f-actualLength').value, 10) : null,
+            actualMvp: mvpField ? (mvpField.value.trim() || null) : null,
+            status: 'final',
+          },
+        });
+        msg.textContent = 'Result saved.'; msg.className = 'status-msg ok';
+        await loadRounds();
+      } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
+    });
+
+    container.appendChild(card);
+  }
+}
+
+async function loadRounds() {
+  rounds = await api('/rounds');
+  renderRounds();
+}
+
+(async () => {
+  const me = await getMe();
+  if (!me) { window.location.href = '/login.html'; return; }
+  if (!me.isAdmin) { document.querySelector('main').innerHTML = '<p>Admins only.</p>'; return; }
+  renderNav('admin', me);
+  try {
+    teams = await api('/admin/teams');
+    await loadRounds();
+  } catch (e) {
+    document.getElementById('rounds').innerHTML = `<p class="status-msg err">${e.message}</p>`;
+  }
+})();
+</script>
+</body>
+</html>

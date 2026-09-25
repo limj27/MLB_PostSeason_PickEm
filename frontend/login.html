@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in - MLB Postseason Pick'em</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="auth-box">
+  <div class="card">
+    <h1 id="formTitle" style="text-align:center;">Log in</h1>
+    <p class="subtitle" style="text-align:center;">MLB Postseason Pick'em</p>
+
+    <div id="displayNameField" style="display:none;">
+      <label for="displayName">Display name</label>
+      <input type="text" id="displayName" placeholder="What your friends will see">
+    </div>
+    <label for="username">Username</label>
+    <input type="text" id="username" autocomplete="username">
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="current-password">
+
+    <button class="primary" id="submitBtn">Log in</button>
+    <div class="status-msg" id="msg"></div>
+
+    <div class="toggle-link">
+      <span id="toggleText">Need an account? <a id="toggleLink">Register</a></span>
+    </div>
+  </div>
+</main>
+
+<script src="/app.js"></script>
+<script>
+let mode = 'login';
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('formTitle').textContent = m === 'login' ? 'Log in' : 'Create an account';
+  document.getElementById('submitBtn').textContent = m === 'login' ? 'Log in' : 'Register';
+  document.getElementById('displayNameField').style.display = m === 'login' ? 'none' : 'block';
+  document.getElementById('toggleText').innerHTML = m === 'login'
+    ? `Need an account? <a id="toggleLink">Register</a>`
+    : `Already have an account? <a id="toggleLink">Log in</a>`;
+  document.getElementById('toggleLink').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
+}
+
+document.getElementById('toggleLink').addEventListener('click', () => setMode('register'));
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const displayName = document.getElementById('displayName').value.trim();
+  const msg = document.getElementById('msg');
+  msg.textContent = '';
+  msg.className = 'status-msg';
+
+  try {
+    if (mode === 'login') {
+      await api('/login', { method: 'POST', body: { username, password } });
+    } else {
+      await api('/register', { method: 'POST', body: { username, password, displayName } });
+    }
+    window.location.href = '/index.html';
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = 'status-msg err';
+  }
+});
+
+(async () => {
+  const me = await getMe();
+  if (me) window.location.href = '/index.html';
+})();
+</script>
+</body>
+</html>

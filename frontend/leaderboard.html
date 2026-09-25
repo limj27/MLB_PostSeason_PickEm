@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leaderboard - MLB Postseason Pick'em</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <h1>Leaderboard</h1>
+  <p class="subtitle">Perfect = 1 pt &middot; Partial (right winner, wrong length) = 0.5 pt &middot; MVP bonus = +2 pts</p>
+  <table id="board">
+    <thead>
+      <tr><th>#</th><th>Player</th><th>Points</th><th>Perfect</th><th>Partial</th><th>Incorrect</th><th>MVP hits</th></tr>
+    </thead>
+    <tbody id="boardBody"></tbody>
+  </table>
+</main>
+
+<script src="/app.js"></script>
+<script>
+(async () => {
+  const me = await getMe();
+  renderNav('leaderboard', me);
+  try {
+    const board = await api('/leaderboard');
+    board.sort((a, b) => b.points - a.points);
+    const tbody = document.getElementById('boardBody');
+    tbody.innerHTML = board.map((row, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${row.displayName}</td>
+        <td>${row.points}</td>
+        <td>${row.perfect}</td>
+        <td>${row.partial}</td>
+        <td>${row.incorrect}</td>
+        <td>${row.mvpHits}</td>
+      </tr>
+    `).join('');
+    if (board.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="muted">No finalized rounds yet.</td></tr>`;
+    }
+  } catch (e) {
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="status-msg err">${e.message}</td></tr>`;
+  }
+})();
+</script>
+</body>
+</html>
