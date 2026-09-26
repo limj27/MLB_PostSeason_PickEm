@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>All Picks - MLB Postseason Pick'em</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <nav id="nav"></nav>
@@ -14,7 +14,7 @@
   <div id="board"></div>
 </main>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
 function categoryFor(roundKey) {
   const k = roundKey.toUpperCase();
@@ -42,15 +42,13 @@ function roundCardHTML(rp) {
   } else if (!rp.picks || rp.picks.length === 0) {
     body = `<p class="muted">Nobody submitted a pick for this round.</p>`;
   } else {
-    body = `<table><thead><tr><th>Player</th><th>Pick</th><th>Length</th>${rnd.hasMvp ? '<th>MVP</th>' : ''}</tr></thead><tbody>` +
-      rp.picks.map(p => `
-        <tr>
-          <td>${p.displayName}</td>
-          <td>${p.pickedTeam}${rnd.status === 'final' && p.pickedTeam === rnd.actualWinner ? ' \u2713' : ''}</td>
-          <td>in ${p.pickedLength}</td>
-          ${rnd.hasMvp ? `<td>${p.pickedMvp || '-'}</td>` : ''}
-        </tr>
-      `).join('') + `</tbody></table>`;
+    body = `<div class="pick-list">` + rp.picks.map(p => `
+      <div class="pick-row">
+        <div class="name">${p.displayName}</div>
+        <div class="detail">${p.pickedTeam}${rnd.status === 'final' && p.pickedTeam === rnd.actualWinner ? ' \u2713' : ''} &middot; in ${p.pickedLength}</div>
+        ${rnd.hasMvp ? `<div class="mvp">MVP: ${p.pickedMvp || '-'}</div>` : ''}
+      </div>
+    `).join('') + `</div>`;
   }
   return `
     <div class="card${rnd.status === 'final' ? ' faded' : ''}">
@@ -66,7 +64,7 @@ function roundCardHTML(rp) {
 
 (async () => {
   const me = await getMe();
-  if (!me) { window.location.href = '/login.html'; return; }
+  if (!me) { window.location.href = 'login.html'; return; }
   renderNav('all-picks', me);
   const container = document.getElementById('board');
   try {

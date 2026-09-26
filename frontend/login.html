@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Log in - MLB Postseason Pick'em</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main class="auth-box">
@@ -30,7 +30,7 @@
   </div>
 </main>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
 let mode = 'login';
 
@@ -61,7 +61,7 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
     } else {
       await api('/register', { method: 'POST', body: { username, password, displayName } });
     }
-    window.location.href = '/index.html';
+    window.location.href = 'index.html';
   } catch (e) {
     msg.textContent = e.message;
     msg.className = 'status-msg err';
@@ -70,7 +70,7 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
 
 (async () => {
   const me = await getMe();
-  if (me) window.location.href = '/index.html';
+  if (me) window.location.href = 'index.html';
 })();
 </script>
 </body>

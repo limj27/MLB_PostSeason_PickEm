@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin - MLB Postseason Pick'em</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <nav id="nav"></nav>
@@ -29,7 +29,7 @@
   <div id="rounds"></div>
 </main>
 
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
 let rounds = [];
 let teams = [];
@@ -290,7 +290,7 @@ document.getElementById('addRoundBtn').addEventListener('click', async () => {
 
 (async () => {
   const me = await getMe();
-  if (!me) { window.location.href = '/login.html'; return; }
+  if (!me) { window.location.href = 'login.html'; return; }
   if (!me.isAdmin) { document.querySelector('main').innerHTML = '<p>Admins only.</p>'; return; }
   renderNav('admin', me);
   try {

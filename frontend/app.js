@@ -1,5 +1,5 @@
 async function api(path, opts = {}) {
-  const res = await fetch('/api' + path, {
+  const res = await fetch('api' + path, {
     method: opts.method || 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -21,11 +21,11 @@ function renderNav(activePage, me) {
   const nav = document.getElementById('nav');
   if (!nav) return;
   const links = [
-    { href: '/index.html', label: 'My Picks', page: 'picks' },
-    { href: '/all-picks.html', label: 'All Picks', page: 'all-picks' },
-    { href: '/leaderboard.html', label: 'Leaderboard', page: 'leaderboard' },
+    { href: 'index.html', label: 'My Picks', page: 'picks' },
+    { href: 'all-picks.html', label: 'All Picks', page: 'all-picks' },
+    { href: 'leaderboard.html', label: 'Leaderboard', page: 'leaderboard' },
   ];
-  if (me && me.isAdmin) links.push({ href: '/admin.html', label: 'Admin', page: 'admin' });
+  if (me && me.isAdmin) links.push({ href: 'admin.html', label: 'Admin', page: 'admin' });
 
   let html = `<div class="brand">\u26be Pick'em</div><div class="nav-links">`;
   for (const l of links) {
@@ -35,7 +35,7 @@ function renderNav(activePage, me) {
     html += `<span class="muted" style="color:#cdd6e3;margin-left:8px;">${me.displayName}</span>`;
     html += `<button class="linklike" id="logoutBtn">Log out</button>`;
   } else {
-    html += `<a href="/login.html">Log in</a>`;
+    html += `<a href="login.html">Log in</a>`;
   }
   html += `</div>`;
   nav.innerHTML = html;
@@ -44,7 +44,7 @@ function renderNav(activePage, me) {
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
       await api('/logout', { method: 'POST' });
-      window.location.href = '/login.html';
+      window.location.href = 'login.html';
     });
   }
 }

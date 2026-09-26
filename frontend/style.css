@@ -151,6 +151,17 @@ h1 {
 }
 .card.faded { opacity: 0.72; }
 
+.pick-list { margin-top: 8px; }
+.pick-row {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+}
+.pick-row:last-child { border-bottom: none; }
+.pick-row .name { font-weight: 700; color: var(--navy); }
+.pick-row .detail { color: var(--navy); margin-top: 2px; }
+.pick-row .mvp { color: var(--gray); font-size: 0.8rem; margin-top: 2px; }
+
 .team-row {
   display: flex;
   gap: 10px;
