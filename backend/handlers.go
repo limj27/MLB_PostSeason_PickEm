@@ -221,6 +221,55 @@ func handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, board)
 }
 
+// handleAllPicks shows every player's pick for every round that has
+// locked (or gone final) - never for a round that's still open, so nobody
+// can see anyone else's pick before the deadline.
+func handleAllPicks(w http.ResponseWriter, r *http.Request, u *User) {
+	rounds, err := fetchRounds()
+	if err != nil {
+		writeErr(w, 500, "could not load rounds")
+		return
+	}
+	type playerPick struct {
+		DisplayName  string  `json:"displayName"`
+		PickedTeam   string  `json:"pickedTeam"`
+		PickedLength int     `json:"pickedLength"`
+		PickedMVP    *string `json:"pickedMvp"`
+	}
+	type roundPicks struct {
+		Round Round        `json:"round"`
+		Picks []playerPick `json:"picks"`
+	}
+	var out []roundPicks
+	for _, rnd := range rounds {
+		revealed := rnd.Locked || rnd.Status == "final"
+		rp := roundPicks{Round: rnd}
+		if revealed {
+			prows, err := db.Query(`
+				SELECT u.display_name, p.picked_team, p.picked_length, p.picked_mvp
+				FROM picks p JOIN users u ON u.id = p.user_id
+				WHERE p.round_id = ?
+				ORDER BY u.display_name ASC`, rnd.ID)
+			if err != nil {
+				writeErr(w, 500, "could not load picks")
+				return
+			}
+			for prows.Next() {
+				var pp playerPick
+				if err := prows.Scan(&pp.DisplayName, &pp.PickedTeam, &pp.PickedLength, &pp.PickedMVP); err != nil {
+					prows.Close()
+					writeErr(w, 500, "could not load picks")
+					return
+				}
+				rp.Picks = append(rp.Picks, pp)
+			}
+			prows.Close()
+		}
+		out = append(out, rp)
+	}
+	writeJSON(w, 200, out)
+}
+
 // ---------- Admin ----------
 
 func handleAdminTeams(w http.ResponseWriter, r *http.Request, u *User) {
@@ -341,6 +390,44 @@ func handleAdminSyncResult(w http.ResponseWriter, r *http.Request, u *User) {
 		return
 	}
 	writeJSON(w, 200, map[string]interface{}{"status": "ok", "winner": winner, "length": length})
+}
+
+// handleAdminSetLock lets the admin set (or clear) a round's lock time by
+// hand, instead of pulling it from the MLB API. Sending an empty lockTime
+// clears it (round stays unlocked / picks stay open).
+func handleAdminSetLock(w http.ResponseWriter, r *http.Request, u *User) {
+	var body struct {
+		RoundID  int     `json:"roundId"`
+		LockTime *string `json:"lockTime"` // RFC3339, or null/omitted to clear
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, "bad request")
+		return
+	}
+	var lockTime *time.Time
+	if body.LockTime != nil && strings.TrimSpace(*body.LockTime) != "" {
+		t, err := time.Parse(time.RFC3339, *body.LockTime)
+		if err != nil {
+			writeErr(w, 400, "lockTime must be a valid date/time")
+			return
+		}
+		lockTime = &t
+	}
+	rnd, err := getRoundByID(body.RoundID)
+	if err != nil {
+		writeErr(w, 404, "round not found")
+		return
+	}
+	status := rnd.Status
+	if status == "pending" && lockTime != nil {
+		status = "open"
+	}
+	_, err = db.Exec(`UPDATE rounds SET lock_time=?, status=? WHERE id=?`, lockTime, status, body.RoundID)
+	if err != nil {
+		writeErr(w, 500, "could not save lock time")
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"status": "ok", "lockTime": lockTime})
 }
 
 // handleAdminSetResult is a manual override / MVP-entry endpoint - MVP

@@ -28,12 +28,15 @@ services:
       DB_NAME: ${DB_NAME}
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME}
       COOKIE_SECURE: "true"
       PORT: 8080
-    # Not published directly - route to this via your existing Nginx
-    # path-based routing, the same way Elite-Nine is set up.
-    expose:
-      - "8080"
+    # For local testing this publishes the port directly to your machine.
+    # On the Pi, you can swap this back to `expose: ["8080"]` and route to
+    # it via your existing Nginx path-based routing instead, the same way
+    # Elite-Nine is set up.
+    ports:
+      - "8080:8080"
     networks:
       - pickem-net
 

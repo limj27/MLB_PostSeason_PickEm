@@ -9,6 +9,10 @@ import (
 func bootstrapAdmin() {
 	adminUser := os.Getenv("ADMIN_USERNAME")
 	adminPass := os.Getenv("ADMIN_PASSWORD")
+	adminDisplayName := os.Getenv("ADMIN_DISPLAY_NAME")
+	if adminDisplayName == "" {
+		adminDisplayName = "Commissioner"
+	}
 	if adminUser == "" || adminPass == "" {
 		log.Println("ADMIN_USERNAME/ADMIN_PASSWORD not set - skipping admin bootstrap")
 		return
@@ -16,8 +20,8 @@ func bootstrapAdmin() {
 	var count int
 	db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = ?`, adminUser).Scan(&count)
 	if count > 0 {
-		// make sure it's flagged as admin even if it already existed
-		db.Exec(`UPDATE users SET is_admin = TRUE WHERE username = ?`, adminUser)
+		// keep is_admin and display name in sync with .env on every boot
+		db.Exec(`UPDATE users SET is_admin = TRUE, display_name = ? WHERE username = ?`, adminDisplayName, adminUser)
 		return
 	}
 	hash, err := hashPassword(adminPass)
@@ -26,7 +30,7 @@ func bootstrapAdmin() {
 		return
 	}
 	_, err = db.Exec(`INSERT INTO users (username, password_hash, display_name, is_admin) VALUES (?, ?, ?, TRUE)`,
-		adminUser, hash, "Commissioner")
+		adminUser, hash, adminDisplayName)
 	if err != nil {
 		log.Printf("could not create admin user: %v", err)
 		return
@@ -50,11 +54,13 @@ func main() {
 	mux.HandleFunc("GET /api/rounds", requireAuth(handleRounds))
 	mux.HandleFunc("POST /api/picks", requireAuth(handleSubmitPick))
 	mux.HandleFunc("GET /api/leaderboard", handleLeaderboard)
+	mux.HandleFunc("GET /api/all-picks", requireAuth(handleAllPicks))
 
 	// Admin
 	mux.HandleFunc("GET /api/admin/teams", requireAdmin(handleAdminTeams))
 	mux.HandleFunc("POST /api/admin/rounds", requireAdmin(handleAdminUpsertRound))
 	mux.HandleFunc("POST /api/admin/sync-lock", requireAdmin(handleAdminSyncLock))
+	mux.HandleFunc("POST /api/admin/set-lock", requireAdmin(handleAdminSetLock))
 	mux.HandleFunc("POST /api/admin/sync-result", requireAdmin(handleAdminSyncResult))
 	mux.HandleFunc("POST /api/admin/set-result", requireAdmin(handleAdminSetResult))
 

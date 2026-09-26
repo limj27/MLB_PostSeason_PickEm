@@ -11,6 +11,21 @@
 <main>
   <h1>Admin</h1>
   <p class="subtitle">Set matchups as they're determined, sync lock times and results from MLB, or enter results manually. MVP always needs a manual entry.</p>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Add a round</h3>
+    <p class="muted">Use this for series that aren't in the default bracket, like the Wild Card round (best of 3, no MVP).</p>
+    <div class="admin-grid">
+      <div><label>Round key (unique, no spaces)</label><input type="text" id="newRoundKey" placeholder="ALWC1"></div>
+      <div><label>Round name</label><input type="text" id="newRoundName" placeholder="AL Wild Card Game 1 Matchup"></div>
+      <div><label>Best of</label><input type="number" id="newBestOf" value="3" min="1" max="7"></div>
+      <div><label>Has MVP?</label><select id="newHasMvp"><option value="false" selected>No</option><option value="true">Yes</option></select></div>
+      <div><label>Sort order</label><input type="number" id="newSortOrder" value="0"></div>
+    </div>
+    <button class="primary" id="addRoundBtn">Add round</button>
+    <div class="status-msg" id="addRoundMsg"></div>
+  </div>
+
   <div id="rounds"></div>
 </main>
 
@@ -19,6 +34,15 @@
 let rounds = [];
 let teams = [];
 
+// Converts an ISO timestamp to the "YYYY-MM-DDTHH:mm" format <input type=datetime-local>
+// expects, in the browser's local time zone.
+function toLocalInputValue(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function teamOptions(selectedId) {
   return `<option value="">-- select team --</option>` + teams.map(t =>
     `<option value="${t.id}" ${String(t.id) === String(selectedId) ? 'selected' : ''}>${t.name}</option>`
@@ -26,11 +50,14 @@ function teamOptions(selectedId) {
 }
 
 function gameTypeOptionsFor(roundKey) {
-  // D = Division Series, L = League Championship Series, W = World Series
-  const guess = roundKey.startsWith('ALDS') || roundKey.startsWith('NLDS') ? 'D'
-    : (roundKey === 'ALCS' || roundKey === 'NLCS') ? 'L'
-    : roundKey === 'WS' ? 'W' : 'D';
+  // F = Wild Card, D = Division Series, L = Championship Series, W = World Series
+  const key = roundKey.toUpperCase();
+  const guess = key.includes('WC') ? 'F'
+    : (key.startsWith('ALDS') || key.startsWith('NLDS')) ? 'D'
+    : (key === 'ALCS' || key === 'NLCS') ? 'L'
+    : key === 'WS' ? 'W' : 'D';
   return `
+    <option value="F" ${guess === 'F' ? 'selected' : ''}>Wild Card (F)</option>
     <option value="D" ${guess === 'D' ? 'selected' : ''}>Division Series (D)</option>
     <option value="L" ${guess === 'L' ? 'selected' : ''}>Championship Series (L)</option>
     <option value="W" ${guess === 'W' ? 'selected' : ''}>World Series (W)</option>
@@ -46,52 +73,74 @@ function renderRounds() {
     const todayStr = new Date().toISOString().slice(0, 10);
     const laterStr = new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10);
 
+    const hasMatchup = rnd.teamA && rnd.teamB;
+    const matchupSummary = hasMatchup ? `${rnd.teamA} vs ${rnd.teamB}` : 'Matchup not set';
+
     card.innerHTML = `
       <div class="round-header">
         <h3>${rnd.roundKey} &middot; ${rnd.roundName}</h3>
         <span class="badge ${rnd.status}">${rnd.status}</span>
       </div>
+      <p class="muted" style="margin-top:-6px;">${matchupSummary}${rnd.lockTime ? ` &middot; locks ${fmtDate(rnd.lockTime)}` : ''}${rnd.status === 'final' ? ` &middot; <strong>${rnd.actualWinner}</strong> in ${rnd.actualLength}` : ''}</p>
 
-      <div class="admin-grid">
-        <div><label>Round name</label><input type="text" class="f-roundName" value="${rnd.roundName}"></div>
-        <div><label>Best of</label><input type="number" class="f-bestOf" value="${rnd.bestOf}" min="3" max="7" step="2"></div>
-        <div><label>Has MVP?</label><select class="f-hasMvp"><option value="false" ${!rnd.hasMvp ? 'selected' : ''}>No</option><option value="true" ${rnd.hasMvp ? 'selected' : ''}>Yes</option></select></div>
-        <div><label>Sort order</label><input type="number" class="f-sortOrder" value="${rnd.sortOrder}"></div>
+      <div class="subsection">
+        <p class="subsection-title">1. Matchup &amp; settings</p>
+        <div class="admin-grid">
+          <div><label>Round name</label><input type="text" class="f-roundName" value="${rnd.roundName}"></div>
+          <div><label>Best of</label><input type="number" class="f-bestOf" value="${rnd.bestOf}" min="3" max="7" step="2"></div>
+          <div><label>Has MVP?</label><select class="f-hasMvp"><option value="false" ${!rnd.hasMvp ? 'selected' : ''}>No</option><option value="true" ${rnd.hasMvp ? 'selected' : ''}>Yes</option></select></div>
+          <div><label>Sort order</label><input type="number" class="f-sortOrder" value="${rnd.sortOrder}"></div>
+        </div>
+        <div class="admin-grid">
+          <div><label>Team A</label><select class="f-teamA">${teamOptions(rnd.teamAMlbId)}</select></div>
+          <div><label>Team B</label><select class="f-teamB">${teamOptions(rnd.teamBMlbId)}</select></div>
+        </div>
+        <button class="secondary saveRoundBtn">Save matchup / settings</button>
+        <div class="status-msg saveMsg"></div>
       </div>
-      <div class="admin-grid">
-        <div><label>Team A</label><select class="f-teamA">${teamOptions(rnd.teamAMlbId)}</select></div>
-        <div><label>Team B</label><select class="f-teamB">${teamOptions(rnd.teamBMlbId)}</select></div>
-      </div>
-      <button class="secondary saveRoundBtn">Save matchup / settings</button>
-      <div class="status-msg saveMsg"></div>
 
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-
-      <div class="admin-grid">
-        <div><label>Series type</label><select class="f-gameType">${gameTypeOptionsFor(rnd.roundKey)}</select></div>
-        <div><label>From date</label><input type="text" class="f-startDate" value="${todayStr}" placeholder="YYYY-MM-DD"></div>
-        <div><label>To date</label><input type="text" class="f-endDate" value="${laterStr}" placeholder="YYYY-MM-DD"></div>
+      <div class="subsection">
+        <p class="subsection-title">2. Lock time</p>
+        <div class="field-row">
+          <div>
+            <label>Lock time</label>
+            <input type="datetime-local" class="f-manualLock" value="${toLocalInputValue(rnd.lockTime)}">
+          </div>
+          <button class="secondary saveLockBtn" style="align-self:flex-end;">Save lock time</button>
+          <button class="secondary clearLockBtn" style="align-self:flex-end;">Clear (reopen picks)</button>
+        </div>
+        <div class="status-msg lockMsg"></div>
+        <details class="advanced-sync">
+          <summary>Or auto-fill from the MLB schedule instead</summary>
+          <div class="admin-grid" style="margin-top:10px;">
+            <div><label>Series type</label><select class="f-gameType">${gameTypeOptionsFor(rnd.roundKey)}</select></div>
+            <div><label>From date</label><input type="text" class="f-startDate" value="${todayStr}" placeholder="YYYY-MM-DD"></div>
+            <div><label>To date</label><input type="text" class="f-endDate" value="${laterStr}" placeholder="YYYY-MM-DD"></div>
+          </div>
+          <button class="secondary syncLockBtn">Sync Game 1 lock time from MLB</button>
+          <div class="status-msg syncMsg"></div>
+        </details>
       </div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="secondary syncLockBtn">Sync Game 1 lock time from MLB</button>
-        <button class="secondary syncResultBtn">Sync result from MLB</button>
-      </div>
-      <div class="status-msg syncMsg"></div>
-      <p class="muted" style="margin-top:8px;">Lock time: ${fmtDate(rnd.lockTime)}${rnd.status === 'final' ? ` &middot; Winner: ${rnd.actualWinner} in ${rnd.actualLength}` : ''}</p>
 
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-
-      <div class="admin-grid">
-        <div><label>Actual winner</label><select class="f-actualWinner">
-          <option value="">-- none --</option>
-          ${rnd.teamA ? `<option value="${rnd.teamA}" ${rnd.actualWinner === rnd.teamA ? 'selected' : ''}>${rnd.teamA}</option>` : ''}
-          ${rnd.teamB ? `<option value="${rnd.teamB}" ${rnd.actualWinner === rnd.teamB ? 'selected' : ''}>${rnd.teamB}</option>` : ''}
-        </select></div>
-        <div><label>Series length</label><input type="number" class="f-actualLength" value="${rnd.actualLength || ''}" min="1" max="7"></div>
-        ${rnd.hasMvp ? `<div><label>Series MVP</label><input type="text" class="f-actualMvp" value="${rnd.actualMvp || ''}"></div>` : ''}
+      <div class="subsection">
+        <p class="subsection-title">3. Result</p>
+        <details class="advanced-sync">
+          <summary>Auto-fill winner/length from the MLB schedule</summary>
+          <button class="secondary syncResultBtn" style="margin-top:8px;">Sync result from MLB</button>
+          <div class="status-msg syncResultMsg"></div>
+        </details>
+        <div class="admin-grid" style="margin-top:12px;">
+          <div><label>Actual winner</label><select class="f-actualWinner">
+            <option value="">-- none --</option>
+            ${rnd.teamA ? `<option value="${rnd.teamA}" ${rnd.actualWinner === rnd.teamA ? 'selected' : ''}>${rnd.teamA}</option>` : ''}
+            ${rnd.teamB ? `<option value="${rnd.teamB}" ${rnd.actualWinner === rnd.teamB ? 'selected' : ''}>${rnd.teamB}</option>` : ''}
+          </select></div>
+          <div><label>Series length</label><input type="number" class="f-actualLength" value="${rnd.actualLength || ''}" min="1" max="7"></div>
+          ${rnd.hasMvp ? `<div><label>Series MVP</label><input type="text" class="f-actualMvp" value="${rnd.actualMvp || ''}"></div>` : ''}
+        </div>
+        <button class="primary saveResultBtn">Save result (marks Final)</button>
+        <div class="status-msg resultMsg"></div>
       </div>
-      <button class="secondary saveResultBtn">Save result manually (marks Final)</button>
-      <div class="status-msg resultMsg"></div>
     `;
 
     card.querySelector('.saveRoundBtn').addEventListener('click', async () => {
@@ -137,7 +186,7 @@ function renderRounds() {
     });
 
     card.querySelector('.syncResultBtn').addEventListener('click', async () => {
-      const msg = card.querySelector('.syncMsg');
+      const msg = card.querySelector('.syncResultMsg');
       try {
         const r = await api('/admin/sync-result', {
           method: 'POST',
@@ -173,6 +222,31 @@ function renderRounds() {
       } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
     });
 
+    card.querySelector('.saveLockBtn').addEventListener('click', async () => {
+      const msg = card.querySelector('.lockMsg');
+      const val = card.querySelector('.f-manualLock').value;
+      if (!val) {
+        msg.textContent = 'Pick a date and time first.';
+        msg.className = 'status-msg err';
+        return;
+      }
+      try {
+        const iso = new Date(val).toISOString();
+        await api('/admin/set-lock', { method: 'POST', body: { roundId: rnd.id, lockTime: iso } });
+        msg.textContent = 'Lock time saved.'; msg.className = 'status-msg ok';
+        await loadRounds();
+      } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
+    });
+
+    card.querySelector('.clearLockBtn').addEventListener('click', async () => {
+      const msg = card.querySelector('.lockMsg');
+      try {
+        await api('/admin/set-lock', { method: 'POST', body: { roundId: rnd.id, lockTime: null } });
+        msg.textContent = 'Lock cleared - picks are open again.'; msg.className = 'status-msg ok';
+        await loadRounds();
+      } catch (e) { msg.textContent = e.message; msg.className = 'status-msg err'; }
+    });
+
     container.appendChild(card);
   }
 }
@@ -181,6 +255,38 @@ async function loadRounds() {
   rounds = await api('/rounds');
   renderRounds();
 }
+
+document.getElementById('addRoundBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('addRoundMsg');
+  const roundKey = document.getElementById('newRoundKey').value.trim().toUpperCase();
+  const roundName = document.getElementById('newRoundName').value.trim();
+  if (!roundKey || !roundName) {
+    msg.textContent = 'Round key and name are required.';
+    msg.className = 'status-msg err';
+    return;
+  }
+  try {
+    await api('/admin/rounds', {
+      method: 'POST',
+      body: {
+        id: 0,
+        roundKey,
+        roundName,
+        bestOf: parseInt(document.getElementById('newBestOf').value, 10),
+        hasMvp: document.getElementById('newHasMvp').value === 'true',
+        sortOrder: parseInt(document.getElementById('newSortOrder').value, 10),
+      },
+    });
+    msg.textContent = 'Round added below.';
+    msg.className = 'status-msg ok';
+    document.getElementById('newRoundKey').value = '';
+    document.getElementById('newRoundName').value = '';
+    await loadRounds();
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = 'status-msg err';
+  }
+});
 
 (async () => {
   const me = await getMe();

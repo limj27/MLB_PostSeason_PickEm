@@ -8,10 +8,14 @@ DuckDNS setup the same way as Elite-Nine.
 ## How it works
 
 - **Rounds**: seeded with ALDS x2, NLDS x2, ALCS, NLCS, and the World Series.
-  Add more (e.g. Wild Card series) from the Admin page if you want them too.
+  Add more (e.g. Wild Card series) right from the Admin page's "Add a round"
+  form - give it a unique key (like `ALWC1`), a best-of (Wild Card is best
+  of 3), and whether it has an MVP (it doesn't).
 - **Picks**: each player picks a team to win the series and the series
   length (e.g. "Dodgers in 5"). ALCS/NLCS/WS also require an MVP pick.
   Picks can be changed freely until the round's lock time.
+- **All Picks board**: `/all-picks.html` shows everyone's picks for a round,
+  but only once that round has locked - nothing leaks before the deadline.
 - **Scoring** (as you specified):
   | Result | Points |
   |---|---|
@@ -35,8 +39,11 @@ DuckDNS setup the same way as Elite-Nine.
    docker compose up -d --build
    ```
 3. On first boot the server creates an admin account using
-   `ADMIN_USERNAME` / `ADMIN_PASSWORD` from your `.env`. Log in with that
-   account to reach `/admin.html`.
+   `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_DISPLAY_NAME` from your
+   `.env` (display name defaults to "Commissioner" if you leave it out).
+   Log in with that account to reach `/admin.html`. This account also
+   works as a normal player - it can submit picks just like anyone else,
+   under the display name you set.
 
 The `backend` service listens on container port 8080 (not published to the
 host directly - see the Nginx section below).
@@ -76,9 +83,10 @@ host directly - see the Nginx section below).
 1. Once a matchup is set (e.g. after the Wild Card round ends and the ALDS
    pairings are known), go to `/admin.html`, pick Team A / Team B from the
    dropdowns (pulled live from MLB's team list), and save.
-2. Click **"Sync Game 1 lock time from MLB"** with a date range covering
-   the start of that round - this finds the first game between those two
-   teams and locks picks at its first pitch.
+2. Set the lock time either by clicking **"Sync Game 1 lock time from MLB"**
+   with a date range covering the start of that round, or by entering it
+   yourself under "Or set lock time manually" and clicking **Save lock
+   time**. "Clear lock" reopens picks if you ever need to walk one back.
 3. After the series ends, click **"Sync result from MLB"** to pull the
    winner and series length automatically.
 4. Manually fill in the **Series MVP** field (and confirm winner/length if
