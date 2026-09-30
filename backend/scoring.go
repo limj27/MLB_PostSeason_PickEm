@@ -1,5 +1,38 @@
 package main
 
+import "strings"
+
+// mvpMatches compares two MVP picks loosely, since it's a free-text field
+// people fill in from memory: case and whitespace shouldn't matter, and
+// neither should typing just a last name ("Ohtani") against a full name
+// ("Shohei Ohtani"). It matches when every word in the shorter pick
+// appears somewhere in the longer one.
+func mvpMatches(a, b *string) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	aWords := strings.Fields(strings.ToLower(strings.TrimSpace(*a)))
+	bWords := strings.Fields(strings.ToLower(strings.TrimSpace(*b)))
+	if len(aWords) == 0 || len(bWords) == 0 {
+		return false
+	}
+
+	shorter, longer := aWords, bWords
+	if len(longer) < len(shorter) {
+		shorter, longer = longer, shorter
+	}
+	longerSet := make(map[string]bool, len(longer))
+	for _, w := range longer {
+		longerSet[w] = true
+	}
+	for _, w := range shorter {
+		if !longerSet[w] {
+			return false
+		}
+	}
+	return true
+}
+
 // scorePick returns points for one pick against a finalized round.
 // Perfect (correct winner + correct series length): 1
 // Partial (correct winner, wrong length):          0.5
@@ -17,8 +50,7 @@ func scorePick(round Round, pick Pick) float64 {
 			points += 0.5
 		}
 	}
-	if round.HasMVP && round.ActualMVP != nil && pick.PickedMVP != nil &&
-		*pick.PickedMVP == *round.ActualMVP {
+	if round.HasMVP && mvpMatches(pick.PickedMVP, round.ActualMVP) {
 		points += 2.0
 	}
 	return points
@@ -90,7 +122,7 @@ func buildLeaderboard() ([]LeaderboardRow, error) {
 			default:
 				lb.Incorrect++
 			}
-			if rnd.HasMVP && rnd.ActualMVP != nil && p.PickedMVP != nil && *p.PickedMVP == *rnd.ActualMVP {
+			if rnd.HasMVP && mvpMatches(p.PickedMVP, rnd.ActualMVP) {
 				lb.MVPHits++
 			}
 		}

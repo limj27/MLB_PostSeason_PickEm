@@ -54,3 +54,16 @@ function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
+
+// Mirrors the backend's mvpMatches in scoring.go: case/whitespace
+// insensitive, and matches a last-name-only pick ("Ohtani") against a
+// full name ("Shohei Ohtani") by requiring every word in the shorter
+// pick to appear somewhere in the longer one.
+function mvpMatches(a, b) {
+  if (!a || !b) return false;
+  const aWords = a.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const bWords = b.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (aWords.length === 0 || bWords.length === 0) return false;
+  const [shorter, longer] = aWords.length <= bWords.length ? [aWords, bWords] : [bWords, aWords];
+  return shorter.every(w => longer.includes(w));
+}

@@ -101,8 +101,7 @@ function resultBadges(rnd) {
     html += `<span class="badge wrong">Wrong</span>`;
   }
   if (rnd.hasMvp) {
-    const mvpCorrect = p.pickedMvp && rnd.actualMvp &&
-      p.pickedMvp.trim().toLowerCase() === rnd.actualMvp.trim().toLowerCase();
+    const mvpCorrect = mvpMatches(p.pickedMvp, rnd.actualMvp);
     html += mvpCorrect
       ? `<span class="badge mvp-hit">MVP &#10003;</span>`
       : `<span class="badge mvp-miss">MVP &#10007;</span>`;
