@@ -62,12 +62,21 @@ function renderRounds() {
   const container = document.getElementById('rounds');
   container.innerHTML = '';
 
-  for (const category of CATEGORY_ORDER) {
-    const inCategory = rounds
-      .filter(r => categoryFor(r.roundKey) === category)
+  // Group rounds by category, then put categories that are entirely
+  // Final after the ones still in progress - so a wrapped-up Wild Card
+  // round drops below Division Series once every WC game is decided,
+  // instead of staying pinned at the top forever.
+  const groups = CATEGORY_ORDER
+    .map(category => ({ category, inCategory: rounds.filter(r => categoryFor(r.roundKey) === category) }))
+    .filter(g => g.inCategory.length > 0);
+
+  const active = groups.filter(g => g.inCategory.some(r => r.status !== 'final'));
+  const completed = groups.filter(g => g.inCategory.every(r => r.status === 'final'));
+
+  for (const { category, inCategory } of [...active, ...completed]) {
+    const sorted = inCategory
       .slice()
       .sort((a, b) => (a.status === 'final' ? 1 : 0) - (b.status === 'final' ? 1 : 0));
-    if (inCategory.length === 0) continue;
 
     const heading = document.createElement('div');
     heading.className = 'section-title';
@@ -76,7 +85,7 @@ function renderRounds() {
 
     const row = document.createElement('div');
     row.className = 'card-row';
-    for (const rnd of inCategory) {
+    for (const rnd of sorted) {
       row.appendChild(renderRoundCard(rnd));
     }
     container.appendChild(row);
