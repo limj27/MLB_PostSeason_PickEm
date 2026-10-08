@@ -25,8 +25,10 @@
   const me = await getMe();
   renderNav('leaderboard', me);
   try {
+    // The backend already returns these in the correct order, including
+    // tiebreakers (Perfect picks, correct World Series pick, MVP hits) -
+    // don't re-sort by points alone here, or ties would reshuffle randomly.
     const board = await api('/leaderboard');
-    board.sort((a, b) => b.points - a.points);
     const tbody = document.getElementById('boardBody');
     tbody.innerHTML = board.map((row, i) => `
       <tr>

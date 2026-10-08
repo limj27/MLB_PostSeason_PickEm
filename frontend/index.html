@@ -3,49 +3,222 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Leaderboard - MLB Postseason Pick'em</title>
+<title>My Picks - MLB Postseason Pick'em</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <nav id="nav"></nav>
 <main>
-  <h1>Leaderboard</h1>
-  <p class="subtitle">Perfect = 1 pt &middot; Partial (right winner, wrong length) = 0.5 pt &middot; MVP bonus = +2 pts</p>
-  <table id="board">
-    <thead>
-      <tr><th>#</th><th>Player</th><th>Points</th><th>Perfect</th><th>Partial</th><th>Incorrect</th><th>MVP hits</th></tr>
-    </thead>
-    <tbody id="boardBody"></tbody>
-  </table>
+  <h1>My Picks</h1>
+  <p class="subtitle">Pick the series winner and the length. You can change a pick any time before its round locks.</p>
+  <div class="card" id="summaryCard" style="display:none;">
+    <div class="summary-bar">
+      <span id="summaryText"></span>
+      <span id="summaryPct" class="muted"></span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="summaryFill" style="width:0%"></div></div>
+  </div>
+  <div id="rounds"></div>
 </main>
 
 <script src="app.js"></script>
 <script>
+let rounds = [];
+
+function categoryFor(roundKey) {
+  const k = roundKey.toUpperCase();
+  if (k.includes('WC')) return 'Wild Card';
+  if (k.startsWith('ALDS') || k.startsWith('NLDS')) return 'Division Series';
+  if (k === 'ALCS' || k === 'NLCS') return 'Championship Series';
+  if (k === 'WS') return 'World Series';
+  return 'Other Rounds';
+}
+const CATEGORY_ORDER = ['Wild Card', 'Division Series', 'Championship Series', 'World Series', 'Other Rounds'];
+
+function statusBadge(rnd) {
+  if (rnd.status === 'final') return `<span class="badge final">Final</span>`;
+  if (rnd.locked) return `<span class="badge locked">Locked</span>`;
+  if (rnd.status === 'open') return `<span class="badge open">Open</span>`;
+  return `<span class="badge pending">Matchup TBD</span>`;
+}
+
+function renderSummary() {
+  const pickable = rounds.filter(r => r.teamA && r.teamB);
+  const picked = pickable.filter(r => r.myPick);
+  const card = document.getElementById('summaryCard');
+  if (pickable.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  const pct = Math.round((picked.length / pickable.length) * 100);
+  document.getElementById('summaryText').textContent = `${picked.length} of ${pickable.length} picks submitted`;
+  document.getElementById('summaryPct').textContent = `${pct}%`;
+  document.getElementById('summaryFill').style.width = `${pct}%`;
+}
+
+function renderRounds() {
+  renderSummary();
+  const container = document.getElementById('rounds');
+  container.innerHTML = '';
+
+  // Group rounds by category, then put categories that are entirely
+  // Final after the ones still in progress - so a wrapped-up Wild Card
+  // round drops below Division Series once every WC game is decided,
+  // instead of staying pinned at the top forever.
+  const groups = CATEGORY_ORDER
+    .map(category => ({ category, inCategory: rounds.filter(r => categoryFor(r.roundKey) === category) }))
+    .filter(g => g.inCategory.length > 0);
+
+  const active = groups.filter(g => g.inCategory.some(r => r.status !== 'final'));
+  const completed = groups.filter(g => g.inCategory.every(r => r.status === 'final'));
+
+  for (const { category, inCategory } of [...active, ...completed]) {
+    const sorted = inCategory
+      .slice()
+      .sort((a, b) => (a.status === 'final' ? 1 : 0) - (b.status === 'final' ? 1 : 0));
+
+    const heading = document.createElement('div');
+    heading.className = 'section-title';
+    heading.textContent = category;
+    container.appendChild(heading);
+
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    for (const rnd of sorted) {
+      row.appendChild(renderRoundCard(rnd));
+    }
+    container.appendChild(row);
+  }
+}
+
+function resultBadges(rnd) {
+  if (rnd.status !== 'final') return '';
+  const p = rnd.myPick;
+  let html = '';
+  if (!p) {
+    html += `<span class="badge nopick">No pick made</span>`;
+    return html;
+  }
+  const teamCorrect = p.pickedTeam === rnd.actualWinner;
+  const lengthCorrect = p.pickedLength === rnd.actualLength;
+  if (teamCorrect && lengthCorrect) {
+    html += `<span class="badge correct">Correct</span>`;
+  } else if (teamCorrect) {
+    html += `<span class="badge partial">Partial</span>`;
+  } else {
+    html += `<span class="badge wrong">Wrong</span>`;
+  }
+  if (rnd.hasMvp) {
+    const mvpCorrect = mvpMatches(p.pickedMvp, rnd.actualMvp);
+    html += mvpCorrect
+      ? `<span class="badge mvp-hit">MVP &#10003;</span>`
+      : `<span class="badge mvp-miss">MVP &#10007;</span>`;
+  }
+  return html;
+}
+
+function renderRoundCard(rnd) {
+    const card = document.createElement('div');
+    card.className = 'card' + (rnd.status === 'final' ? ' faded' : '');
+
+    const hasMatchup = rnd.teamA && rnd.teamB;
+    const disabled = rnd.locked || !hasMatchup;
+    const myPick = rnd.myPick;
+    const minLen = Math.floor(rnd.bestOf / 2) + 1;
+
+    let lengthOptions = '';
+    for (let i = minLen; i <= rnd.bestOf; i++) {
+      const sel = myPick && myPick.pickedLength === i ? 'selected' : '';
+      lengthOptions += `<option value="${i}" ${sel}>in ${i} games</option>`;
+    }
+
+    card.innerHTML = `
+      <div class="round-header">
+        <h3>${rnd.roundName}</h3>
+        ${statusBadge(rnd)}
+      </div>
+      ${rnd.status === 'final' ? `<div style="margin:-6px 0 10px; display:flex; gap:6px; flex-wrap:wrap;">${resultBadges(rnd)}</div>` : ''}
+      ${!hasMatchup ? '<p class="muted">Matchup not set yet - check back once this round is determined.</p>' : ''}
+      ${hasMatchup ? `
+        <div class="team-row" data-round="${rnd.id}">
+          <button type="button" class="team-btn" data-team="${rnd.teamA}">${rnd.teamA}</button>
+          <button type="button" class="team-btn" data-team="${rnd.teamB}">${rnd.teamB}</button>
+        </div>
+        <div class="field-row">
+          <div>
+            <label>Series length</label>
+            <select class="lengthSelect">${lengthOptions}</select>
+          </div>
+          ${rnd.hasMvp ? `
+          <div>
+            <label>Series MVP</label>
+            <input type="text" class="mvpInput" placeholder="Player name" value="${myPick && myPick.pickedMvp ? myPick.pickedMvp : ''}">
+          </div>` : ''}
+        </div>
+        <div class="muted">Locks: ${fmtDate(rnd.lockTime)}</div>
+        <div style="margin-top:10px;">
+          <button class="primary saveBtn" ${disabled ? 'disabled' : ''}>${myPick ? 'Update pick' : 'Submit pick'}</button>
+        </div>
+        <div class="status-msg"></div>
+      ` : ''}
+      ${rnd.status === 'final' ? `<p class="muted" style="margin-top:8px;">Result: <strong>${rnd.actualWinner}</strong> in ${rnd.actualLength}${rnd.actualMvp ? ` &middot; MVP: ${rnd.actualMvp}` : ''}</p>` : ''}
+    `;
+
+    if (hasMatchup) {
+      const teamBtns = card.querySelectorAll('.team-btn');
+      let selectedTeam = myPick ? myPick.pickedTeam : null;
+      teamBtns.forEach(btn => {
+        if (btn.dataset.team === selectedTeam) btn.classList.add('selected');
+        btn.addEventListener('click', () => {
+          if (disabled) return;
+          selectedTeam = btn.dataset.team;
+          teamBtns.forEach(b => b.classList.toggle('selected', b === btn));
+        });
+      });
+
+      const saveBtn = card.querySelector('.saveBtn');
+      const msg = card.querySelector('.status-msg');
+      saveBtn.addEventListener('click', async () => {
+        msg.textContent = '';
+        msg.className = 'status-msg';
+        if (!selectedTeam) {
+          msg.textContent = 'Pick a team first.';
+          msg.className = 'status-msg err';
+          return;
+        }
+        const pickedLength = parseInt(card.querySelector('.lengthSelect').value, 10);
+        const mvpInput = card.querySelector('.mvpInput');
+        const pickedMvp = mvpInput ? mvpInput.value.trim() : null;
+        try {
+          await api('/picks', {
+            method: 'POST',
+            body: { roundId: rnd.id, pickedTeam: selectedTeam, pickedLength, pickedMvp: pickedMvp || null },
+          });
+          rnd.myPick = { pickedTeam: selectedTeam, pickedLength, pickedMvp: pickedMvp || null };
+          renderSummary();
+          saveBtn.textContent = 'Update pick';
+          msg.textContent = 'Saved!';
+          msg.className = 'status-msg ok';
+        } catch (e) {
+          msg.textContent = e.message;
+          msg.className = 'status-msg err';
+        }
+      });
+    }
+
+    return card;
+}
+
 (async () => {
   const me = await getMe();
-  renderNav('leaderboard', me);
+  if (!me) { window.location.href = 'login.html'; return; }
+  renderNav('picks', me);
   try {
-    // The backend already returns these in the correct order, including
-    // tiebreakers (Perfect picks, correct World Series pick, MVP hits) -
-    // don't re-sort by points alone here, or ties would reshuffle randomly.
-    const board = await api('/leaderboard');
-    const tbody = document.getElementById('boardBody');
-    tbody.innerHTML = board.map((row, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${row.displayName}</td>
-        <td>${row.points}</td>
-        <td>${row.perfect}</td>
-        <td>${row.partial}</td>
-        <td>${row.incorrect}</td>
-        <td>${row.mvpHits}</td>
-      </tr>
-    `).join('');
-    if (board.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="muted">No finalized rounds yet.</td></tr>`;
-    }
+    rounds = await api('/rounds');
+    renderRounds();
   } catch (e) {
-    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="status-msg err">${e.message}</td></tr>`;
+    document.getElementById('rounds').innerHTML = `<p class="status-msg err">${e.message}</p>`;
   }
 })();
 </script>
