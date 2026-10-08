@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // mvpMatches compares two MVP picks loosely, since it's a free-text field
 // people fill in from memory: case and whitespace shouldn't matter, and
@@ -81,6 +84,15 @@ func buildLeaderboard() ([]LeaderboardRow, error) {
 		return nil, err
 	}
 
+	// Find the World Series round, if it exists, for the WSCorrect tiebreaker.
+	var wsRound *Round
+	for i := range rounds {
+		if strings.EqualFold(rounds[i].RoundKey, "WS") {
+			wsRound = &rounds[i]
+			break
+		}
+	}
+
 	var board []LeaderboardRow
 	for _, u := range users {
 		lb := LeaderboardRow{UserID: u.id, DisplayName: u.name}
@@ -126,8 +138,31 @@ func buildLeaderboard() ([]LeaderboardRow, error) {
 				lb.MVPHits++
 			}
 		}
+
+		// Tiebreaker: did they pick the actual World Series winner?
+		if wsRound != nil && wsRound.Status == "final" && wsRound.ActualWinner != nil {
+			if p, ok := picksByRound[wsRound.ID]; ok && p.PickedTeam == *wsRound.ActualWinner {
+				lb.WSCorrect = true
+			}
+		}
+
 		board = append(board, lb)
 	}
+
+	sort.SliceStable(board, func(i, j int) bool {
+		a, b := board[i], board[j]
+		if a.Points != b.Points {
+			return a.Points > b.Points
+		}
+		if a.Perfect != b.Perfect {
+			return a.Perfect > b.Perfect
+		}
+		if a.WSCorrect != b.WSCorrect {
+			return a.WSCorrect // true sorts before false
+		}
+		return a.MVPHits > b.MVPHits
+	})
+
 	return board, nil
 }
 

@@ -28,9 +28,9 @@ type Round struct {
 	SortOrder    int        `json:"sortOrder"`
 
 	// Populated per-request, not stored columns:
-	Locked     bool  `json:"locked"`
-	MyPick     *Pick `json:"myPick,omitempty"`
-	PickCount  int   `json:"pickCount,omitempty"`
+	Locked    bool  `json:"locked"`
+	MyPick    *Pick `json:"myPick,omitempty"`
+	PickCount int   `json:"pickCount,omitempty"`
 }
 
 type Pick struct {
@@ -50,4 +50,10 @@ type LeaderboardRow struct {
 	Partial     int     `json:"partial"`
 	Incorrect   int     `json:"incorrect"`
 	MVPHits     int     `json:"mvpHits"`
+
+	// Tiebreakers, applied in this order when Points are equal:
+	// 1. Perfect (already above)
+	// 2. WSCorrect - picked the actual World Series winner
+	// 3. MVPHits (already above)
+	WSCorrect bool `json:"wsCorrect"`
 }
